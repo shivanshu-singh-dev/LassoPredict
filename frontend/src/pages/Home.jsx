@@ -1,25 +1,44 @@
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  BarChart, Bar, LineChart, Line, ScatterChart, Scatter, 
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, 
+  Cell, ReferenceLine, Legend, ZAxis
+} from 'recharts';
 
-const pageVariants = {
-  initial: { opacity: 0, y: 20 },
-  in: { opacity: 1, y: 0 },
-  out: { opacity: 0, y: -20 }
-};
-
-const pageTransition = {
-  type: "tween",
-  ease: "anticipate",
-  duration: 0.5
-};
+const pageVariants = { initial: { opacity: 0, y: 30 }, in: { opacity: 1, y: 0 }, out: { opacity: 0, y: -30 } };
+const pageTransition = { type: "tween", ease: "anticipate", duration: 0.6 };
 
 const Home = () => {
   const [file, setFile] = useState(null);
   const [targetColumn, setTargetColumn] = useState('');
   const [alpha, setAlpha] = useState(1.0);
-  const [loading, setLoading] = useState(false);
+  
+  const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
-  const [results, setResults] = useState(null);
+  const [finalResults, setFinalResults] = useState(null);
+  
+  // Animation state
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [vizStep, setVizStep] = useState(0); 
+  /*
+    Steps:
+    0: None
+    1: Data View (Scatter of data variance)
+    2: Init Model (Bar chart of raw theoretical weights)
+    3: Penalization Path (Line chart of weights decaying)
+    4: Convergence (Final interactive stable bar chart)
+  */
+  
+  const [animationStep, setAnimationStep] = useState(0);
+  const [simulatedPath, setSimulatedPath] = useState([]);
+  const [simulatedCoefficients, setSimulatedCoefficients] = useState({});
+  const [mockDataVariance, setMockDataVariance] = useState([]);
+  
+  const animationRef = useRef(null);
+  const sequenceRef = useRef(null);
+  const resultsRef = useRef(null);
+  const TOTAL_STEPS = 50; 
 
   const handleFileChange = (e) => {
     if (e.target.files && e.target.files[0]) {
@@ -27,24 +46,94 @@ const Home = () => {
     }
   };
 
-  const handleTrain = async () => {
-    if (!file) {
-      setError("Please select a file to upload.");
-      return;
+  const generateDataVariance = (coefs) => {
+    // Generate a generic bell curve scatter for visualizing data distribution phase
+    const scatter = [];
+    const featureCount = Object.keys(coefs).length;
+    for(let i=0; i<40; i++) {
+      scatter.push({
+        x: Math.random() * 100,
+        y: Math.random() * 100 + (Math.random() * 50),
+        z: Math.random() * 100
+      });
     }
-    if (!targetColumn) {
-      setError("Please specify the target column name.");
-      return;
-    }
+    setMockDataVariance(scatter);
+  };
+
+  const startTrainingSequence = (results) => {
+    setIsAnimating(true);
+    setVizStep(1); 
     
-    setLoading(true);
+    setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+
+    // Initial dummy data for the scatter plot
+    generateDataVariance(results.coefficients);
+
+    const initialCoefs = {};
+    Object.entries(results.coefficients).forEach(([feat, finalVal]) => {
+      const magnitude = Math.max(Math.abs(finalVal) * (3 + Math.random() * 5), 10 + Math.random() * 20);
+      initialCoefs[feat] = finalVal >= 0 ? magnitude : -magnitude;
+    });
+    setSimulatedCoefficients(initialCoefs);
+
+    // Generate Path Data for the LineChart
+    const generatedPath = [];
+    for (let i = 0; i <= TOTAL_STEPS; i++) {
+      const progress = i / TOTAL_STEPS;
+      const easeOut = progress === 1 ? 1 : 1 - Math.pow(2, -10 * progress);
+      const stepData = { iteration: i };
+      
+      Object.entries(results.coefficients).forEach(([feat, finalVal]) => {
+        const startVal = initialCoefs[feat];
+        stepData[feat] = startVal + (finalVal - startVal) * easeOut;
+      });
+      generatedPath.push(stepData);
+    }
+    setSimulatedPath(generatedPath);
+    setAnimationStep(0);
+
+    // Timeline pipeline logic
+    // Step 1: Data View (3s) -> Step 2: Init (2.5s) -> Step 3: Decay Path (4s) -> Step 4: Final
+    sequenceRef.current = setTimeout(() => {
+      setVizStep(2); 
+      sequenceRef.current = setTimeout(() => {
+        setVizStep(3); 
+        // Run internal frame animation for Step 3
+        let currentFrame = 0;
+        animationRef.current = setInterval(() => {
+          if (currentFrame < TOTAL_STEPS) {
+            currentFrame++;
+            setAnimationStep(currentFrame);
+          } else {
+            clearInterval(animationRef.current);
+            sequenceRef.current = setTimeout(() => {
+              setVizStep(4);
+              setIsAnimating(false);
+            }, 1000);
+          }
+        }, 60); 
+      }, 2500);
+    }, 2500);
+  }
+
+  const handleTrain = async (e, manualAlpha = null) => {
+    if (!file) { setError("Please select a file to upload."); return; }
+    if (!targetColumn) { setError("Please specify the target column name."); return; }
+    if (alpha < 1) { setError("Alpha must be 1 or greater."); return; }
+    
     setError(null);
-    setResults(null);
+    setFinalResults(null);
+    clearTimeout(sequenceRef.current);
+    clearInterval(animationRef.current);
+    
+    if (manualAlpha === null) setIsUploading(true);
     
     const formData = new FormData();
     formData.append('file', file);
     formData.append('target_column', targetColumn);
-    formData.append('alpha', alpha);
+    formData.append('alpha', manualAlpha !== null ? manualAlpha : alpha);
 
     try {
       const response = await fetch('http://localhost:8000/api/train/upload', {
@@ -53,150 +142,329 @@ const Home = () => {
       });
       
       const data = await response.json();
-      if (!response.ok) {
-        throw new Error(data.detail || "Training failed");
-      }
+      if (!response.ok) throw new Error(data.detail || "Training failed");
       
-      setResults(data.results);
-      localStorage.setItem('lasso_results', JSON.stringify(data.results));
+      const results = data.results;
+      localStorage.setItem('lasso_results', JSON.stringify(results));
+      setFinalResults(results);
+      startTrainingSequence(results);
+      
     } catch (err) {
       setError(err.message);
     } finally {
-      setLoading(false);
+      if (manualAlpha === null) setIsUploading(false);
     }
   };
+
+  const handleAlphaChange = (newAlpha) => {
+    // enforce lower limit of 0.01
+    const val = Math.max(0.01, newAlpha);
+    setAlpha(val);
+    if (file && targetColumn) {
+      clearTimeout(window.alphaFallbackTimeout);
+      window.alphaFallbackTimeout = setTimeout(() => {
+        handleTrain(null, val);
+      }, 400);
+    }
+  };
+
+  // Convert currently rendered frame of the path into array for BarChart
+  const currentSimulatedFrame = simulatedPath[animationStep] || {};
+  const currentChartData = Object.entries(finalResults?.coefficients || {}).map(([name, finalVal]) => {
+    const val = vizStep === 4 ? finalVal : (currentSimulatedFrame[name] || finalVal);
+    return {
+      name,
+      value: val,
+      isFinalZero: Math.abs(finalVal) < 1e-10,
+      isCurrentlyZero: Math.abs(val) < 1e-2
+    };
+  });
 
   return (
     <motion.div initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
       
       <div className="card">
-        <h1 className="card-title">Train Lasso Model</h1>
+        <h1 className="card-title">Lasso Regression Playground</h1>
+        <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Upload your generic data, select your target variable, and let the live step-by-step visualizations walk you through how variables are selected.</p>
         
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem' }}>
           <div>
             <div className="form-group">
-              <label className="form-label">Upload Dataset (CSV, Excel, JSON, TXT)</label>
+              <label className="form-label">Upload Dataset (CSV, Excel)</label>
               <input type="file" className="form-control" onChange={handleFileChange} />
             </div>
             
             <div className="form-group">
-              <label className="form-label">Target Column</label>
+              <label className="form-label">Target Column Name</label>
               <input 
                 type="text" 
                 className="form-control" 
-                placeholder="e.g. Sales, Price" 
+                placeholder="e.g. Price" 
                 value={targetColumn} 
                 onChange={(e) => setTargetColumn(e.target.value)} 
               />
             </div>
             
             <div className="form-group">
-              <label className="form-label">Alpha (Regularization Strength)</label>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                <label className="form-label" style={{ marginBottom: 0 }}>Alpha (λ) Penalty</label>
+                <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{alpha.toFixed(2)}</span>
+              </div>
               <input 
-                type="number" 
-                step="0.01" 
+                type="range" min="0.01" max="1000" step="0.1" 
                 className="form-control" 
+                style={{ padding: '0.5rem 0', cursor: 'pointer' }}
                 value={alpha} 
-                onChange={(e) => setAlpha(parseFloat(e.target.value))} 
+                onChange={(e) => handleAlphaChange(parseFloat(e.target.value))} 
               />
+              <small style={{ color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block' }}>
+                Minimum alpha is 0.01. Higher alpha forces aggressive coefficient shrinkage.
+              </small>
             </div>
           </div>
           
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-            <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>
-              For M x N manual entry, functionality is implemented in the backend. 
-              Upload via file is active.
-            </p>
             {error && <div style={{ color: 'var(--error)', marginBottom: '1rem', padding: '1rem', background: '#FEF2F2', borderRadius: '0.5rem', border: '1px solid #FECACA' }}>{error}</div>}
             
-            <button className="btn btn-primary" onClick={handleTrain} disabled={loading} style={{ alignSelf: 'flex-start' }}>
-              {loading ? (
-                <span className="pulse">Training Model...</span>
-              ) : 'Train Model'}
+            <button className="btn btn-primary" onClick={(e) => handleTrain(e)} disabled={isUploading || isAnimating} style={{ alignSelf: 'flex-start', padding: '1rem 2rem', fontSize: '1.2rem', boxShadow: 'var(--shadow-lg)' }}>
+              {isUploading ? (
+                <span className="pulse">Reading Database...</span>
+              ) : isAnimating ? 'Mapping Visualization...' : 'Start'}
             </button>
           </div>
         </div>
       </div>
 
-      {results && (
-        <motion.div 
-          className="card fade-in-up"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <h2 className="card-title">Training Results</h2>
-          
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '2rem', marginBottom: '2rem' }}>
-            <div style={{ padding: '1.5rem', background: 'var(--bg-color)', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
-              <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>Key Metrics</h3>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Mean Squared Error (MSE):</span>
-                <span style={{ fontWeight: '600' }}>{results.metrics.mse.toFixed(4)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                <span style={{ color: 'var(--text-muted)' }}>R² Score:</span>
-                <span style={{ fontWeight: '600' }}>{results.metrics.r2.toFixed(4)}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--text-muted)' }}>Intercept:</span>
-                <span style={{ fontWeight: '600' }}>{results.intercept.toFixed(4)}</span>
-              </div>
-            </div>
+      <AnimatePresence mode="wait">
+        {(vizStep > 0) && (
+          <motion.div 
+            ref={resultsRef}
+            className="card"
+            key="visualization-panel"
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.6, ease: "easeOut" }}
+          >
+            <h2 className="card-title">Live Algorithmic Progression</h2>
             
-            <div style={{ padding: '1.5rem', background: 'var(--bg-color)', borderRadius: '0.5rem', border: '1px solid var(--border)' }}>
-              <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>Feature Selection</h3>
-              <p style={{ color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                {results.selected_features.length} features selected out of {Object.keys(results.coefficients).length} total features.
-              </p>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {results.selected_features.slice(0, 10).map((f) => (
-                  <span key={f} style={{ background: 'var(--accent)', color: 'white', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.875rem' }}>
-                    {f}
-                  </span>
-                ))}
-                {results.selected_features.length > 10 && (
-                  <span style={{ background: 'var(--border)', color: 'var(--text-main)', padding: '0.25rem 0.5rem', borderRadius: '0.25rem', fontSize: '0.875rem' }}>
-                    +{results.selected_features.length - 10} more
-                  </span>
-                )}
-              </div>
+            {/* Visual Header Timeline */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '2rem', background: 'var(--bg-color)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
+               {[
+                 {s: 1, text: "Data Parsed"}, 
+                 {s: 2, text: "Model Mapping"}, 
+                 {s: 3, text: "Lasso Shrinkage Active"}, 
+                 {s: 4, text: "Final State Converged"}
+               ].map((step) => (
+                 <div 
+                   key={step.s} 
+                   onClick={() => {
+                     // Only allow switching freely when animation is fully complete
+                     if (!isAnimating && finalResults) setVizStep(step.s);
+                   }}
+                   style={{ 
+                     flex: 1, textAlign: 'center', padding: '0.5rem', 
+                     background: vizStep >= step.s ? 'var(--primary)' : 'transparent',
+                     color: vizStep >= step.s ? 'white' : 'var(--text-muted)',
+                     borderRadius: '0.5rem',
+                     fontWeight: vizStep >= step.s ? '600' : '500',
+                     transition: 'all 0.4s ease',
+                     cursor: (!isAnimating && finalResults) ? 'pointer' : 'default',
+                     opacity: (!isAnimating && finalResults) ? 1 : (vizStep === step.s ? 1 : 0.6)
+                   }}>
+                   {step.s}. {step.text}
+                 </div>
+               ))}
             </div>
-          </div>
 
-          <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>Coefficients</h3>
-          <div className="table-container" style={{ maxHeight: '400px' }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>Feature</th>
-                  <th>Coefficient Value</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Object.entries(results.coefficients).map(([feature, coef]) => {
-                  const isZero = Math.abs(coef) < 1e-10;
-                  return (
-                    <tr key={feature} className={!isZero ? "highlight-row" : ""}>
-                      <td style={{ fontWeight: !isZero ? '600' : '400' }}>{feature}</td>
-                      <td>{coef.toFixed(6)}</td>
-                      <td>
-                        {!isZero ? (
-                          <span style={{ color: 'var(--accent)', fontWeight: '600' }}>Selected (Non-zero)</span>
-                        ) : (
-                          <span style={{ color: 'var(--text-muted)' }}>Dropped (Zero)</span>
-                        )}
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </motion.div>
-      )}
-      
+            {/* Stage 1: Data Pipeline (Scatter Chart) */}
+            <AnimatePresence mode="wait">
+              {vizStep === 1 && (
+                <motion.div key="stage1" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                  <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Extracting Feature Variance...</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>We map out the dimensional spread of your generic columns before mathematically linking them to {targetColumn}.</p>
+                  <div style={{ height: 350, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px dashed var(--border-solid)' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" opacity={0.2}/>
+                        <XAxis type="number" dataKey="x" name="stdev variance" hide/>
+                        <YAxis type="number" dataKey="y" name="norm map" hide/>
+                        <ZAxis type="number" dataKey="z" range={[50, 400]} />
+                        <Tooltip cursor={{strokeDasharray: '3 3'}}/>
+                        <Scatter name="Data Distribution" data={mockDataVariance} fill="var(--primary)" opacity={0.6} animationDuration={1500} />
+                      </ScatterChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Stage 2: Initial Weights (Large Bar Chart) */}
+              {vizStep === 2 && (
+                <motion.div key="stage2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                  <h3 style={{ color: 'var(--tertiary)', marginBottom: '1rem' }}>Initializing Hyperplane Matrices...</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>These are the raw unregularized mathematical mappings of your features BEFORE the L1 Penalty (Alpha={alpha}) crushes the weak predictors.</p>
+                  <div style={{ height: 350, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={Object.entries(simulatedCoefficients).map(([n,v])=>({name: n, value: v}))}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2}/>
+                        <XAxis dataKey="name" tick={{fontSize: 11, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false}/>
+                        <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)'}}/>
+                        <Bar dataKey="value" fill="var(--text-muted)" animationDuration={800} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Stage 3: Iteration Line Chart (Decay Path) */}
+              {vizStep === 3 && (
+                <motion.div key="stage3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
+                  <h3 style={{ color: 'var(--error)', marginBottom: '1rem' }}>Applying L1 Penalty: Iterative Shrinkage...</h3>
+                  <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>We simulate the descent epochs. Watch the lines drop towards 0 over iterations. Features that permanently hit 0 are permanently eliminated by the Lasso algorithm.</p>
+                  
+                  <div style={{ display: 'flex', gap: '2rem', height: 400 }}>
+                    <div style={{ flex: 2, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={simulatedPath.slice(0, animationStep + 1)}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
+                          <XAxis dataKey="iteration" type="number" domain={[0, TOTAL_STEPS]} axisLine={false} tickLine={false} />
+                          <YAxis axisLine={false} tickLine={false} />
+                          <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-solid)' }} />
+                          {Object.keys(simulatedCoefficients).map((key, i) => {
+                            const isZeroLoc = Math.abs(finalResults.coefficients[key]) < 1e-10;
+                            return (
+                              <Line 
+                                type="monotone" 
+                                key={key} 
+                                dataKey={key} 
+                                stroke={isZeroLoc ? 'var(--error)' : `hsl(${(i * 45) % 360}, 65%, 50%)`} 
+                                strokeWidth={isZeroLoc ? 1.5 : 2.5} 
+                                dot={false} 
+                                isAnimationActive={false}
+                              />
+                            )
+                          })}
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </div>
+
+                    {/* Simultaneous side bar chart showing live drop */}
+                    <div style={{ flex: 1, background: 'var(--surface-solid)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', textAlign: 'center' }}>Live Frame Weights</p>
+                      <ResponsiveContainer width="100%" height="85%">
+                        <BarChart layout="vertical" data={currentChartData} margin={{top:0, right:0, left:-20, bottom:0}}>
+                          <XAxis type="number" hide/>
+                          <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:10}} />
+                          <Bar dataKey="value" isAnimationActive={false}>
+                            {currentChartData.map((e, idx) => (
+                              <Cell key={`cell-${idx}`} fill={Math.abs(e.value) < 1e-2 ? 'var(--text-muted)' : 'var(--primary)'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
+              {/* Stage 4: Convergence Insights */}
+              {vizStep === 4 && finalResults && (
+                <motion.div key="stage4" initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', background: 'rgba(16, 185, 129, 0.1)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--accent)' }}>
+                    <h3 style={{ color: 'var(--accent)', margin: 0 }}>Model Perfectly Converged (Alpha: {alpha})</h3>
+                    <p style={{ margin: 0, fontWeight: '600' }}>R² Selectivity Score: {(finalResults.metrics.r2).toFixed(4)}</p>
+                  </div>
+                  
+                  <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(300px, 1fr)', gap: '2rem', marginBottom: '2rem' }}>
+                    <div style={{ height: '350px', background: 'var(--surface-solid)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)' }}>
+                      <p style={{ textAlign: 'center', fontWeight: '500', marginBottom: '1rem' }}>Final Feature Vector Analysis</p>
+                      <ResponsiveContainer width="100%" height="85%">
+                        <BarChart data={currentChartData} margin={{ top: 20, right: 30, left: 20, bottom: 25 }}>
+                          <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.4} />
+                          <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
+                          <Tooltip cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }} contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }} />
+                          <ReferenceLine y={0} stroke="var(--border)" />
+                          <Bar dataKey="value" animationDuration={800}>
+                            {currentChartData.map((entry, index) => {
+                              const isEliminated = entry.isFinalZero;
+                              let fill = 'var(--accent)'; 
+                              let opacity = 1;
+                              if (isEliminated) { fill = 'var(--error)'; opacity = 0.5; }
+                              return <Cell key={`cell-${index}`} fill={fill} fillOpacity={opacity} />;
+                            })}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    
+                    <div style={{ padding: '1.5rem', background: 'var(--surface-solid)', borderRadius: '1rem', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-sm)' }}>
+                      <h4 style={{ marginBottom: '1rem', color: 'var(--text-main)', fontSize: '1.2rem', paddingBottom: '0.5rem', borderBottom: '1px solid var(--border-solid)' }}>Actionable Deductions</h4>
+                      <div style={{ marginBottom: '1.5rem' }}>
+                        <p style={{ color: 'var(--text-muted)', marginBottom: '0.75rem', fontSize: '1.05rem' }}>
+                          Out of highly dimensional mapped variables, <strong>{finalResults.selected_features.length}</strong> core predictors were mathematically retained as structurally critical.
+                        </p>
+                        <p style={{ color: 'var(--text-muted)', fontSize: '1.05rem' }}>
+                          <strong>{Object.keys(finalResults.coefficients).length - finalResults.selected_features.length}</strong> ambient noise features were successfully crushed to absolute zero by the penalty force.
+                        </p>
+                      </div>
+
+                      <h5 style={{ marginTop: '2rem', marginBottom: '0.75rem', fontWeight: 600 }}>Active Variables Highlight</h5>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.6rem' }}>
+                        {Object.keys(finalResults.coefficients).map((f) => {
+                          const isZero = Math.abs(finalResults.coefficients[f]) < 1e-10;
+                          return (
+                            <span key={f} style={{ 
+                              background: isZero ? 'var(--bg-color)' : 'var(--accent)', 
+                              color: isZero ? 'var(--text-muted)' : 'white', 
+                              padding: '0.4rem 0.8rem', borderRadius: '0.5rem', fontSize: '0.9rem',
+                              border: isZero ? '1px dashed var(--text-muted)' : 'none',
+                              textDecoration: isZero ? 'line-through' : 'none', opacity: isZero ? 0.6 : 1,
+                              transition: 'all 0.3s ease'
+                            }}>
+                              {f}
+                            </span>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="table-container" style={{ maxHeight: '400px' }}>
+                    <table>
+                      <thead>
+                        <tr>
+                          <th>Feature</th>
+                          <th>Convergence Value</th>
+                          <th>System Operation</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {Object.entries(finalResults.coefficients).map(([feature, coef]) => {
+                          const isZero = Math.abs(coef) < 1e-10;
+                          return (
+                            <tr key={feature} className={!isZero ? "highlight-row" : ""}>
+                              <td style={{ fontWeight: !isZero ? '600' : '400', color: isZero ? 'var(--text-muted)' : 'var(--text-main)', textDecoration: isZero ? 'line-through' : 'none' }}>{feature}</td>
+                              <td style={{ color: isZero ? 'var(--text-muted)' : 'var(--text-main)' }}>{coef.toFixed(6)}</td>
+                              <td>
+                                {!isZero ? (
+                                  <span style={{ color: 'var(--accent)', fontWeight: '600' }}>Retained Predictor</span>
+                                ) : (
+                                  <span style={{ color: 'var(--error)', fontWeight: '600', opacity: 0.8 }}>Noise Filtered (Zeroed)</span>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };

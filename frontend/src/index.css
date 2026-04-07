@@ -65,7 +65,7 @@ h1, h2, h3, h4, .navbar-brand {
   -webkit-backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   box-shadow: var(--shadow-sm);
-  padding: 1rem 3rem;
+  padding: 1rem max(3rem, calc((100vw - 900px) / 2));
   display: flex;
   justify-content: space-between;
   align-items: center;
