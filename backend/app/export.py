@@ -6,10 +6,6 @@ import base64
 
 def export_results(results: dict, format: str) -> dict:
     """Takes results dictionary and returns base64 encoded string of the exported file along with filename."""
-    # Data to export (we'll just tabularize metrics and selected features for simple export)
-    # the frontend passes down the dict: {coefficients, intercept, selected_features, predictions, metrics}
-    
-    # Create simple dataframes
     coef_df = pd.DataFrame(list(results.get("coefficients", {}).items()), columns=["Feature", "Coefficient"])
     metrics_df = pd.DataFrame([results.get("metrics", {})])
     
@@ -51,9 +47,11 @@ def export_results(results: dict, format: str) -> dict:
         for k, v in results.get("coefficients", {}).items():
             pdf.cell(200, 10, txt=f"{k}: {v}", ln=True)
             
-        output = io.BytesIO()
-        output.write(pdf.output(dest='S').encode('latin1')) # FPDF output to string -> bytes
-        return {"filename": "results.pdf", "data": base64.b64encode(output.getvalue()).decode(), "type": "application/pdf"}
+        try:
+            pdf_bytes = bytes(pdf.output())
+        except TypeError:
+            pdf_bytes = pdf.output(dest='S').encode('latin1')
+        return {"filename": "results.pdf", "data": base64.b64encode(pdf_bytes).decode(), "type": "application/pdf"}
         
     else:
         raise ValueError("Unsupported format")

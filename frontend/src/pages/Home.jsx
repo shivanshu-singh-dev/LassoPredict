@@ -18,7 +18,7 @@ const Home = () => {
   const [error, setError] = useState(null);
   const [finalResults, setFinalResults] = useState(null);
   
-  // Animation state
+
   const [isAnimating, setIsAnimating] = useState(false);
   const [vizStep, setVizStep] = useState(0); 
   /*
@@ -47,7 +47,7 @@ const Home = () => {
   };
 
   const generateDataVariance = (coefs) => {
-    // Generate a generic bell curve scatter for visualizing data distribution phase
+
     const scatter = [];
     const featureCount = Object.keys(coefs).length;
     for(let i=0; i<40; i++) {
@@ -65,10 +65,13 @@ const Home = () => {
     setVizStep(1); 
     
     setTimeout(() => {
-      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 100);
+      const anchor = document.getElementById("results-anchor");
+      if (anchor) {
+        anchor.scrollIntoView({ behavior: 'smooth' });
+      }
+    }, 700);
 
-    // Initial dummy data for the scatter plot
+
     generateDataVariance(results.coefficients);
 
     const initialCoefs = {};
@@ -78,7 +81,7 @@ const Home = () => {
     });
     setSimulatedCoefficients(initialCoefs);
 
-    // Generate Path Data for the LineChart
+
     const generatedPath = [];
     for (let i = 0; i <= TOTAL_STEPS; i++) {
       const progress = i / TOTAL_STEPS;
@@ -94,13 +97,12 @@ const Home = () => {
     setSimulatedPath(generatedPath);
     setAnimationStep(0);
 
-    // Timeline pipeline logic
-    // Step 1: Data View (3s) -> Step 2: Init (2.5s) -> Step 3: Decay Path (4s) -> Step 4: Final
+
     sequenceRef.current = setTimeout(() => {
       setVizStep(2); 
       sequenceRef.current = setTimeout(() => {
         setVizStep(3); 
-        // Run internal frame animation for Step 3
+
         let currentFrame = 0;
         animationRef.current = setInterval(() => {
           if (currentFrame < TOTAL_STEPS) {
@@ -111,29 +113,34 @@ const Home = () => {
             sequenceRef.current = setTimeout(() => {
               setVizStep(4);
               setIsAnimating(false);
-            }, 1000);
+            }, 1500);
           }
-        }, 60); 
-      }, 2500);
-    }, 2500);
+        }, 220);
+      }, 4000);
+    }, 4000);
   }
 
   const handleTrain = async (e, manualAlpha = null) => {
     if (!file) { setError("Please select a file to upload."); return; }
     if (!targetColumn) { setError("Please specify the target column name."); return; }
-    if (alpha < 1) { setError("Alpha must be 1 or greater."); return; }
+    if (alpha <= 0) { setError("Alpha must be greater than 0."); return; }
     
     setError(null);
     setFinalResults(null);
     clearTimeout(sequenceRef.current);
     clearInterval(animationRef.current);
     
-    if (manualAlpha === null) setIsUploading(true);
+    const isMainTrain = manualAlpha === null;
+    if (isMainTrain) {
+      setIsUploading(true);
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
     
     const formData = new FormData();
     formData.append('file', file);
     formData.append('target_column', targetColumn);
-    formData.append('alpha', manualAlpha !== null ? manualAlpha : alpha);
+    formData.append('alpha', isMainTrain ? alpha : manualAlpha);
 
     try {
       const response = await fetch('http://localhost:8000/api/train/upload', {
@@ -152,23 +159,16 @@ const Home = () => {
     } catch (err) {
       setError(err.message);
     } finally {
-      if (manualAlpha === null) setIsUploading(false);
+      if (isMainTrain) setIsUploading(false);
     }
   };
 
   const handleAlphaChange = (newAlpha) => {
-    // enforce lower limit of 0.01
     const val = Math.max(0.01, newAlpha);
     setAlpha(val);
-    if (file && targetColumn) {
-      clearTimeout(window.alphaFallbackTimeout);
-      window.alphaFallbackTimeout = setTimeout(() => {
-        handleTrain(null, val);
-      }, 400);
-    }
   };
 
-  // Convert currently rendered frame of the path into array for BarChart
+
   const currentSimulatedFrame = simulatedPath[animationStep] || {};
   const currentChartData = Object.entries(finalResults?.coefficients || {}).map(([name, finalVal]) => {
     const val = vizStep === 4 ? finalVal : (currentSimulatedFrame[name] || finalVal);
@@ -183,6 +183,56 @@ const Home = () => {
   return (
     <motion.div initial="initial" animate="in" exit="out" variants={pageVariants} transition={pageTransition}>
       
+      {/* 5-second immersive loading overlay */}
+      <AnimatePresence>
+        {isUploading && (
+          <motion.div 
+            initial={{ opacity: 0 }} 
+            animate={{ opacity: 1 }} 
+            exit={{ opacity: 0 }}
+            style={{ 
+              position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, 
+              background: 'rgba(15, 23, 42, 0.95)', backdropFilter: 'blur(12px)', 
+              zIndex: 9999, display: 'flex', flexDirection: 'column', 
+              alignItems: 'center', justifyContent: 'center' 
+            }}
+          >
+            <div style={{ position: 'relative', width: '100px', height: '100px', marginBottom: '3.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {[0, 1, 2].map((i) => (
+                <motion.div
+                  key={i}
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1.5 + i * 0.5, repeat: Infinity, ease: "linear" }}
+                  style={{ 
+                    position: 'absolute', width: `${100 - i * 20}%`, height: `${100 - i * 20}%`, 
+                    border: `3px solid hsla(${(i * 45 + 200) % 360}, 80%, 60%, 0.3)`,
+                    borderTopColor: i === 0 ? 'var(--primary)' : (i === 1 ? 'var(--accent)' : 'var(--error)'),
+                    borderRadius: '50%',
+                    willChange: 'transform'
+                  }}
+                />
+              ))}
+              <motion.div 
+                animate={{ scale: [0.8, 1.2, 0.8], opacity: [0.6, 1, 0.6] }}
+                transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+                style={{ width: '20px', height: '20px', background: 'var(--primary)', borderRadius: '50%', boxShadow: '0 0 20px var(--primary)', willChange: 'transform, opacity' }}
+              />
+            </div>
+            
+            <motion.h2 
+              animate={{ opacity: [0.6, 1, 0.6] }}
+              transition={{ duration: 2, repeat: Infinity }}
+              style={{ color: 'white', letterSpacing: '6px', textTransform: 'uppercase', marginBottom: '1rem', fontSize: '2.5rem', fontWeight: 'bold' }}
+            >
+              Training Model
+            </motion.h2>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: '1.2rem', fontStyle: 'italic', maxWidth: '600px', textAlign: 'center', lineHeight: '1.5' }}>
+              Executing gradient descent, mapping multi-dimensional feature variance, and enforcing strict L1 penalty shrinkage...
+            </p>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       <div className="card">
         <h1 className="card-title">Lasso Regression Playground</h1>
         <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Upload your generic data, select your target variable, and let the live step-by-step visualizations walk you through how variables are selected.</p>
@@ -208,13 +258,36 @@ const Home = () => {
             <div className="form-group">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
                 <label className="form-label" style={{ marginBottom: 0 }}>Alpha (λ) Penalty</label>
-                <span style={{ fontWeight: 'bold', color: 'var(--primary)' }}>{alpha.toFixed(2)}</span>
+                <input
+                  type="number"
+                  min="0.01"
+                  max="1000"
+                  step="0.1"
+                  value={alpha}
+                  onChange={(e) => {
+                    const rawValue = e.target.value;
+                    if (rawValue === '') {
+                      setAlpha('');
+                      return;
+                    }
+                    const parsed = parseFloat(rawValue);
+                    if (!isNaN(parsed)) {
+                      handleAlphaChange(parsed);
+                    }
+                  }}
+                  onBlur={() => {
+                    if (alpha === '' || alpha < 0.01) {
+                      handleAlphaChange(0.01);
+                    }
+                  }}
+                  style={{ width: '80px', padding: '0.2rem 0.5rem', borderRadius: '4px', border: '1px solid var(--border-solid)', background: 'var(--surface-solid)', color: 'var(--text-main)', fontWeight: 'bold', textAlign: 'right' }}
+                />
               </div>
               <input 
                 type="range" min="0.01" max="1000" step="0.1" 
                 className="form-control" 
                 style={{ padding: '0.5rem 0', cursor: 'pointer' }}
-                value={alpha} 
+                value={alpha === '' ? 0.01 : alpha} 
                 onChange={(e) => handleAlphaChange(parseFloat(e.target.value))} 
               />
               <small style={{ color: 'var(--text-muted)', marginTop: '0.5rem', display: 'block' }}>
@@ -226,14 +299,18 @@ const Home = () => {
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             {error && <div style={{ color: 'var(--error)', marginBottom: '1rem', padding: '1rem', background: '#FEF2F2', borderRadius: '0.5rem', border: '1px solid #FECACA' }}>{error}</div>}
             
-            <button className="btn btn-primary" onClick={(e) => handleTrain(e)} disabled={isUploading || isAnimating} style={{ alignSelf: 'flex-start', padding: '1rem 2rem', fontSize: '1.2rem', boxShadow: 'var(--shadow-lg)' }}>
+            <button className="btn btn-primary" onClick={(e) => handleTrain(e)} disabled={isUploading || isAnimating} style={{ alignSelf: 'flex-start', padding: '1.2rem 2.5rem', fontSize: '1.3rem', fontWeight: 'bold', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center' }}>
               {isUploading ? (
-                <span className="pulse">Reading Database...</span>
-              ) : isAnimating ? 'Mapping Visualization...' : 'Start'}
+                <span className="pulse" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} style={{ width: 16, height: 16, border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }} /> Processing Iterations...
+                </span>
+              ) : isAnimating ? 'Mapping Visuals...' : 'Train Model'}
             </button>
           </div>
         </div>
       </div>
+
+      <div id="results-anchor" style={{ scrollMarginTop: '40px' }} />
 
       <AnimatePresence mode="wait">
         {(vizStep > 0) && (
@@ -259,7 +336,6 @@ const Home = () => {
                  <div 
                    key={step.s} 
                    onClick={() => {
-                     // Only allow switching freely when animation is fully complete
                      if (!isAnimating && finalResults) setVizStep(step.s);
                    }}
                    style={{ 
@@ -283,15 +359,23 @@ const Home = () => {
                 <motion.div key="stage1" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
                   <h3 style={{ color: 'var(--primary)', marginBottom: '1rem' }}>Extracting Feature Variance...</h3>
                   <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>We map out the dimensional spread of your generic columns before mathematically linking them to {targetColumn}.</p>
-                  <div style={{ height: 350, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px dashed var(--border-solid)' }}>
+                  <div style={{ height: 500, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px dashed var(--border-solid)' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <ScatterChart margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
                         <CartesianGrid strokeDasharray="3 3" opacity={0.2}/>
                         <XAxis type="number" dataKey="x" name="stdev variance" hide/>
                         <YAxis type="number" dataKey="y" name="norm map" hide/>
                         <ZAxis type="number" dataKey="z" range={[50, 400]} />
-                        <Tooltip cursor={{strokeDasharray: '3 3'}}/>
-                        <Scatter name="Data Distribution" data={mockDataVariance} fill="var(--primary)" opacity={0.6} animationDuration={1500} />
+                        <Tooltip 
+                          cursor={{strokeDasharray: '3 3'}} 
+                          contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)', background: 'var(--surface-solid)' }}
+                          formatter={(value, name) => [value.toFixed(2), name === 'z' ? 'Magnitude' : 'Value']}
+                        />
+                        <Scatter name="Data Distribution" data={mockDataVariance} fill="var(--primary)" opacity={0.9} animationDuration={2500}>
+                          {mockDataVariance.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={`hsl(${(index * 35) % 360}, 80%, 65%)`} />
+                          ))}
+                        </Scatter>
                       </ScatterChart>
                     </ResponsiveContainer>
                   </div>
@@ -303,13 +387,22 @@ const Home = () => {
                 <motion.div key="stage2" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0 }}>
                   <h3 style={{ color: 'var(--tertiary)', marginBottom: '1rem' }}>Initializing Hyperplane Matrices...</h3>
                   <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>These are the raw unregularized mathematical mappings of your features BEFORE the L1 Penalty (Alpha={alpha}) crushes the weak predictors.</p>
-                  <div style={{ height: 350, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
+                  <div style={{ height: 500, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={Object.entries(simulatedCoefficients).map(([n,v])=>({name: n, value: v}))}>
                         <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2}/>
+                        <Tooltip 
+                          cursor={{fill: 'var(--bg-color)', opacity: 0.4}} 
+                          contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)', background: 'var(--surface-solid)' }}
+                          formatter={(value) => [value.toFixed(4), 'Initial Weight']}
+                        />
                         <XAxis dataKey="name" tick={{fontSize: 11, fill: 'var(--text-muted)'}} axisLine={false} tickLine={false}/>
                         <YAxis axisLine={false} tickLine={false} tick={{fill: 'var(--text-muted)'}}/>
-                        <Bar dataKey="value" fill="var(--text-muted)" animationDuration={800} />
+                        <Bar dataKey="value" animationDuration={1200} radius={[6, 6, 0, 0]}>
+                          {Object.entries(simulatedCoefficients).map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={`hsl(${(index * 45) % 360}, 65%, 50%)`} />
+                          ))}
+                        </Bar>
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
@@ -322,14 +415,19 @@ const Home = () => {
                   <h3 style={{ color: 'var(--error)', marginBottom: '1rem' }}>Applying L1 Penalty: Iterative Shrinkage...</h3>
                   <p style={{ color: 'var(--text-muted)', marginBottom: '2rem' }}>We simulate the descent epochs. Watch the lines drop towards 0 over iterations. Features that permanently hit 0 are permanently eliminated by the Lasso algorithm.</p>
                   
-                  <div style={{ display: 'flex', gap: '2rem', height: 400 }}>
+                  <div style={{ display: 'flex', gap: '2rem', height: 550 }}>
                     <div style={{ flex: 2, background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)' }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <LineChart data={simulatedPath.slice(0, animationStep + 1)}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.2} />
                           <XAxis dataKey="iteration" type="number" domain={[0, TOTAL_STEPS]} axisLine={false} tickLine={false} />
                           <YAxis axisLine={false} tickLine={false} />
-                          <Tooltip contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-solid)' }} />
+                          <Tooltip 
+                            contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-solid)', boxShadow: '0 10px 25px rgba(0,0,0,0.1)', background: 'rgba(255, 255, 255, 0.95)', backdropFilter: 'blur(4px)' }} 
+                            labelFormatter={(label) => `Iteration ${label}`}
+                            formatter={(value) => value.toFixed(4)}
+                          />
+                          <Legend wrapperStyle={{ paddingTop: '20px' }} />
                           {Object.keys(simulatedCoefficients).map((key, i) => {
                             const isZeroLoc = Math.abs(finalResults.coefficients[key]) < 1e-10;
                             return (
@@ -338,8 +436,9 @@ const Home = () => {
                                 key={key} 
                                 dataKey={key} 
                                 stroke={isZeroLoc ? 'var(--error)' : `hsl(${(i * 45) % 360}, 65%, 50%)`} 
-                                strokeWidth={isZeroLoc ? 1.5 : 2.5} 
+                                strokeWidth={isZeroLoc ? 2 : 3.5} 
                                 dot={false} 
+                                activeDot={{ r: 7, strokeWidth: 2, stroke: 'white' }}
                                 isAnimationActive={false}
                               />
                             )
@@ -353,11 +452,22 @@ const Home = () => {
                       <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '1rem', textAlign: 'center' }}>Live Frame Weights</p>
                       <ResponsiveContainer width="100%" height="85%">
                         <BarChart layout="vertical" data={currentChartData} margin={{top:0, right:0, left:-20, bottom:0}}>
+                          <defs>
+                            <linearGradient id="colorAccent" x1="0" y1="0" x2="1" y2="0">
+                              <stop offset="5%" stopColor="var(--accent)" stopOpacity={0.9}/>
+                              <stop offset="95%" stopColor="var(--accent)" stopOpacity={0.6}/>
+                            </linearGradient>
+                          </defs>
                           <XAxis type="number" hide/>
                           <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{fontSize:10}} />
-                          <Bar dataKey="value" isAnimationActive={false}>
+                          <Tooltip 
+                            cursor={{fill: 'transparent'}}
+                            contentStyle={{ borderRadius: '8px', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-sm)', fontSize: '12px', background: 'var(--surface-solid)' }}
+                            formatter={(value) => value.toFixed(4)}
+                          />
+                          <Bar dataKey="value" isAnimationActive={false} radius={[0, 4, 4, 0]}>
                             {currentChartData.map((e, idx) => (
-                              <Cell key={`cell-${idx}`} fill={Math.abs(e.value) < 1e-2 ? 'var(--text-muted)' : 'var(--primary)'} />
+                              <Cell key={`cell-${idx}`} fill={Math.abs(e.value) < 1e-2 ? 'var(--text-muted)' : 'url(#colorAccent)'} style={{ transition: 'fill 0.3s ease' }} />
                             ))}
                           </Bar>
                         </BarChart>
@@ -376,16 +486,20 @@ const Home = () => {
                   </div>
                   
                   <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(300px, 1fr)', gap: '2rem', marginBottom: '2rem' }}>
-                    <div style={{ height: '350px', background: 'var(--surface-solid)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)' }}>
+                    <div style={{ height: '500px', background: 'var(--surface-solid)', padding: '1rem', borderRadius: '1rem', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)' }}>
                       <p style={{ textAlign: 'center', fontWeight: '500', marginBottom: '1rem' }}>Final Feature Vector Analysis</p>
                       <ResponsiveContainer width="100%" height="85%">
                         <BarChart data={currentChartData} margin={{ top: 20, right: 30, left: 20, bottom: 25 }}>
                           <CartesianGrid strokeDasharray="3 3" vertical={false} opacity={0.4} />
                           <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
                           <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: 'var(--text-muted)' }} />
-                          <Tooltip cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }} contentStyle={{ borderRadius: '8px', border: '1px solid var(--border)', boxShadow: 'var(--shadow-md)' }} />
+                          <Tooltip 
+                            cursor={{ fill: 'rgba(99, 102, 241, 0.05)' }} 
+                            contentStyle={{ borderRadius: '12px', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)', background: 'var(--surface-solid)' }} 
+                            formatter={(value) => [value.toFixed(5), 'Final Coefficient']}
+                          />
                           <ReferenceLine y={0} stroke="var(--border)" />
-                          <Bar dataKey="value" animationDuration={800}>
+                          <Bar dataKey="value" animationDuration={1200} radius={[6, 6, 0, 0]}>
                             {currentChartData.map((entry, index) => {
                               const isEliminated = entry.isFinalZero;
                               let fill = 'var(--accent)'; 
@@ -430,7 +544,7 @@ const Home = () => {
                     </div>
                   </div>
 
-                  <div className="table-container" style={{ maxHeight: '400px' }}>
+                  <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto' }}>
                     <table>
                       <thead>
                         <tr>

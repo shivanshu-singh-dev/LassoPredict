@@ -48,7 +48,7 @@ const Download = () => {
         throw new Error(data.detail || 'Export failed');
       }
       
-      // Handle file download
+
       const linkSource = `data:${data.export.type};base64,${data.export.data}`;
       const downloadLink = document.createElement("a");
       downloadLink.href = linkSource;

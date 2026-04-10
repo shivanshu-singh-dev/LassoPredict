@@ -9,10 +9,8 @@ def load_data(file_content: bytes, filename: str) -> pd.DataFrame:
     elif filename.endswith(".xlsx") or filename.endswith(".xls"):
         return pd.read_excel(io.BytesIO(file_content))
     elif filename.endswith(".json"):
-        # Expecting JSON as a list of records or orient='records'
         return pd.read_json(io.BytesIO(file_content))
     elif filename.endswith(".txt"):
-        # Expecting tab or comma separated text
         return pd.read_csv(io.BytesIO(file_content), sep=None, engine='python')
     else:
         raise ValueError("Unsupported file format")

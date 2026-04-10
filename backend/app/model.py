@@ -28,7 +28,7 @@ def train_lasso_model(df: pd.DataFrame, target_column: str, alpha: float = 1.0):
         "coefficients": json_safe(coefficients),
         "intercept": float(model.intercept_),
         "selected_features": selected_features,
-        "predictions": predictions.tolist()[:100], # return first 100 predictions to avoid huge payload
+        "predictions": predictions.tolist()[:100],
         "metrics": {
             "mse": float(mse),
             "r2": float(r2)
