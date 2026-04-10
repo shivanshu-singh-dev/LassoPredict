@@ -1,11 +1,31 @@
+import sys
+import os
+import traceback
+
+# Ensure the current directory is in sys.path for absolute imports
+sys.path.append(os.path.dirname(__file__))
+
+try:
+    from app.data_loader import load_data, parse_manual_data
+    from app.preprocessing import clean_data
+    from app.model import train_lasso_model
+    from app.export import export_results
+except ImportError as e:
+    print(f"Import Error: {str(e)}")
+    print(traceback.format_exc())
+    # Fallback for different execution environments
+    try:
+        from .app.data_loader import load_data, parse_manual_data
+        from .app.preprocessing import clean_data
+        from .app.model import train_lasso_model
+        from .app.export import export_results
+    except Exception as e2:
+        print(f"Secondary Import Error: {str(e2)}")
+
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json
-from app.data_loader import load_data, parse_manual_data
-from app.preprocessing import clean_data
-from app.model import train_lasso_model
-from app.export import export_results
 
 app = FastAPI(title="Lasso Regression API")
 
