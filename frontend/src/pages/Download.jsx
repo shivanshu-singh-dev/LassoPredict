@@ -34,8 +34,11 @@ const Download = () => {
     if (!results) return;
     setLoading(true);
     setError(null);
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+
     try {
-      const response = await fetch('http://localhost:8000/api/export', {
+      const response = await fetch(`${baseUrl}/api/export`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

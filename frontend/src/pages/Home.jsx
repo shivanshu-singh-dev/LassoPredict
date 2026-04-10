@@ -142,8 +142,11 @@ const Home = () => {
     formData.append('target_column', targetColumn);
     formData.append('alpha', isMainTrain ? alpha : manualAlpha);
 
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+
     try {
-      const response = await fetch('http://localhost:8000/api/train/upload', {
+      const response = await fetch(`${baseUrl}/api/train/upload`, {
         method: 'POST',
         body: formData,
       });

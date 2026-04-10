@@ -54,7 +54,7 @@ const DevelopedBy = () => (
         >
           <img src="/images/prof.jpeg" alt="Prof. Photo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
         </motion.div>
-        <h3 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Professor Name</h3>
+        <h3 style={{ margin: 0, fontSize: '1.8rem', color: 'var(--text-main)' }}>Dr. A Swaminathan</h3>
         <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', marginTop: '0.5rem' }}>Project Guide & Mentor</p>
       </motion.div>
 
