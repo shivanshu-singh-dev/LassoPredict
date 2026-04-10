@@ -142,9 +142,9 @@ const Home = () => {
     formData.append('target_column', targetColumn);
     formData.append('alpha', isMainTrain ? alpha : manualAlpha);
 
-    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
     const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-    const apiUrl = `${baseUrl}/api/train/upload`;
+    const apiUrl = apiBase.startsWith('http') ? `${baseUrl}/api/train/upload` : `${baseUrl}/train/upload`;
 
     console.log(`[API Request] POST ${apiUrl}`);
 

@@ -34,9 +34,9 @@ const Download = () => {
     if (!results) return;
     setLoading(true);
     setError(null);
-    const apiBase = import.meta.env.VITE_API_BASE_URL || '';
+    const apiBase = import.meta.env.VITE_API_BASE_URL || '/api';
     const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
-    const apiUrl = `${baseUrl}/api/export`;
+    const apiUrl = apiBase.startsWith('http') ? `${baseUrl}/api/export` : `${baseUrl}/export`;
 
     console.log(`[API Request] POST ${apiUrl}`);
 
