@@ -36,9 +36,12 @@ const Download = () => {
     setError(null);
     const apiBase = import.meta.env.VITE_API_BASE_URL || '';
     const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+    const apiUrl = `${baseUrl}/api/export`;
+
+    console.log(`[API Request] POST ${apiUrl}`);
 
     try {
-      const response = await fetch(`${baseUrl}/api/export`, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -46,19 +49,29 @@ const Download = () => {
         body: JSON.stringify({ results, format })
       });
       
-      const data = await response.json();
       if (!response.ok) {
-        throw new Error(data.detail || 'Export failed');
+        const errorText = await response.text();
+        let errorMessage = `Server error (${response.status}): ${response.statusText}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorMessage;
+        } catch (e) {
+          if (errorText.length > 0 && errorText.length < 100) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
       }
       
-
+      const data = await response.json();
       const linkSource = `data:${data.export.type};base64,${data.export.data}`;
       const downloadLink = document.createElement("a");
       downloadLink.href = linkSource;
       downloadLink.download = data.export.filename;
       downloadLink.click();
     } catch (err) {
-      setError(err.message);
+      console.error(`[API Error] ${err.message}`, err);
+      setError(err.message === "Unexpected end of JSON input" 
+        ? "The server returned an empty response. Please verify your backend is running and the URL is correct."
+        : err.message);
     } finally {
       setLoading(false);
     }

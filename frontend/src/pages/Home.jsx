@@ -144,23 +144,40 @@ const Home = () => {
 
     const apiBase = import.meta.env.VITE_API_BASE_URL || '';
     const baseUrl = apiBase.endsWith('/') ? apiBase.slice(0, -1) : apiBase;
+    const apiUrl = `${baseUrl}/api/train/upload`;
+
+    console.log(`[API Request] POST ${apiUrl}`);
 
     try {
-      const response = await fetch(`${baseUrl}/api/train/upload`, {
+      const response = await fetch(apiUrl, {
         method: 'POST',
         body: formData,
       });
       
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.detail || "Training failed");
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMessage = `Server error (${response.status}): ${response.statusText}`;
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.detail || errorMessage;
+        } catch (e) {
+          // If not JSON, use the status text or first few chars of body
+          if (errorText.length > 0 && errorText.length < 100) errorMessage = errorText;
+        }
+        throw new Error(errorMessage);
+      }
       
+      const data = await response.json();
       const results = data.results;
       localStorage.setItem('lasso_results', JSON.stringify(results));
       setFinalResults(results);
       startTrainingSequence(results);
       
     } catch (err) {
-      setError(err.message);
+      console.error(`[API Error] ${err.message}`, err);
+      setError(err.message === "Unexpected end of JSON input" 
+        ? "The server returned an empty response. Please verify your backend is running and the URL is correct."
+        : err.message);
     } finally {
       if (isMainTrain) setIsUploading(false);
     }
