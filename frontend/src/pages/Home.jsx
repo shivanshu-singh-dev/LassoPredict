@@ -609,16 +609,63 @@ const Home = () => {
 
                   {/* Prediction Redirect Toast */}
                   <motion.div 
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.5 }}
-                    style={{ background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)', textAlign: 'center', boxShadow: 'var(--shadow-lg)' }}
+                    initial={{ opacity: 0, scale: 0.95, y: 30 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    transition={{ delay: 0.6, type: "spring", stiffness: 100 }}
+                    style={{ 
+                      marginTop: '3rem',
+                      background: 'radial-gradient(circle at center, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.95) 100%)', 
+                      padding: '3.5rem', 
+                      borderRadius: '1.5rem', 
+                      border: '1px solid rgba(99, 102, 241, 0.3)', 
+                      textAlign: 'center', 
+                      boxShadow: '0 20px 40px rgba(0,0,0,0.2), 0 0 40px rgba(99, 102, 241, 0.15)',
+                      position: 'relative',
+                      overflow: 'hidden'
+                    }}
                   >
-                    <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>The model is fully trained!</h3>
-                    <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Do live prediction testing with your new optimized structural parameters.</p>
-                    <Link to="/predict" className="btn btn-primary" style={{ padding: '1rem 2rem', fontSize: '1.2rem', textDecoration: 'none', display: 'inline-block' }}>
-                      Go to Prediction Tab
-                    </Link>
+                    <motion.div 
+                      animate={{ backgroundPosition: ['0% 0%', '100% 100%'] }}
+                      transition={{ duration: 15, repeat: Infinity, repeatType: 'reverse' }}
+                      style={{
+                        position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, zIndex: 0, opacity: 0.4,
+                        backgroundImage: 'radial-gradient(circle at center, rgba(16, 185, 129, 0.15) 0%, transparent 60%)',
+                        backgroundSize: '200% 200%'
+                      }}
+                    />
+                    
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                      <h3 style={{ marginBottom: '1rem', color: 'white', fontSize: '2.2rem', fontWeight: '800', letterSpacing: '-0.5px' }}>
+                        The model is fully trained!
+                      </h3>
+                      <p style={{ color: 'rgba(255,255,255,0.7)', marginBottom: '2.5rem', fontSize: '1.2rem', maxWidth: '600px', margin: '0 auto 2.5rem auto' }}>
+                        Seamlessly test live data points with your new mathematically optimized structural parameters. Step into the Prediction environment.
+                      </p>
+                      <Link to="/predict" style={{ textDecoration: 'none', display: 'inline-block' }}>
+                        <motion.button
+                          whileHover={{ scale: 1.05, boxShadow: '0 0 30px rgba(16,185,129,0.5)' }}
+                          whileTap={{ scale: 0.95 }}
+                          style={{
+                            padding: '1.2rem 3rem',
+                            fontSize: '1.2rem',
+                            textDecoration: 'none',
+                            background: 'linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '3rem',
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '10px',
+                            transition: 'all 0.3s ease'
+                          }}
+                        >
+                          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
+                          Go to Prediction Tab
+                        </motion.button>
+                      </Link>
+                    </div>
                   </motion.div>
                 </motion.div>
               )}
