@@ -138,16 +138,31 @@ const Home = () => {
     if (alpha <= 0) { setError("Alpha must be greater than 0."); return; }
     if (cooldownRemaining > 0) return;
     
+    // File Size warning (Vercel constraint check)
+    // 5MB is roughly 5 * 1024 * 1024 bytes
+    const isMainTrain = manualAlpha === null;
+    if (isMainTrain && file.size > 5 * 1024 * 1024) {
+      if (!window.confirm("Warning: Your dataset exceeds 5MB. As this is deployed on Vercel Serverless, it might hit execution limits resulting in a timeout. Do you want to try running it anyway?")) {
+        return;
+      }
+    }
+
+    // Always Wipe old local storage context upon fresh train initialization so ghosts don't persist
+    if (isMainTrain) {
+      localStorage.removeItem('lasso_results');
+      window.dispatchEvent(new Event("storage"));
+    }
+
     setError(null);
     setFinalResults(null);
     clearTimeout(sequenceRef.current);
     clearInterval(animationRef.current);
     
-    const isMainTrain = manualAlpha === null;
+    // Set 5-second min timer promise
+    const enforceMinLoadingTime = new Promise(resolve => setTimeout(resolve, 5000));
+    
     if (isMainTrain) {
       setIsUploading(true);
-
-      await new Promise(resolve => setTimeout(resolve, 5000));
     }
     
     const formData = new FormData();
@@ -162,10 +177,16 @@ const Home = () => {
     console.log(`[API Request] POST ${apiUrl}`);
 
     try {
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        body: formData,
-      });
+      const responsePromise = fetch(apiUrl, { method: 'POST', body: formData });
+      
+      // Await both promises (the fetch and the 5-sec artificial delay) when full training begins
+      let response;
+      if (isMainTrain) {
+        const [res] = await Promise.all([responsePromise, enforceMinLoadingTime]);
+        response = res;
+      } else {
+        response = await responsePromise;
+      }
       
       if (!response.ok) {
         const errorText = await response.text();

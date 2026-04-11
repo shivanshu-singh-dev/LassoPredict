@@ -11,27 +11,40 @@ const Prediction = () => {
   const [inputs, setInputs] = useState({});
   const [prediction, setPrediction] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  const [inputError, setInputError] = useState(false);
 
-  useEffect(() => {
-    // Load model from local storage
+  const loadModel = () => {
     const storedModel = localStorage.getItem('lasso_results');
     if (storedModel) {
       try {
         const parsed = JSON.parse(storedModel);
         setModelData(parsed);
-        // Initialize inputs
         const initialInputs = {};
         parsed.selected_features.forEach(f => {
           initialInputs[f] = '';
         });
         setInputs(initialInputs);
+        setPrediction(null);
       } catch (err) {
         console.error("Failed to parse stored model", err);
       }
+    } else {
+      setModelData(null);
     }
+  };
+
+  useEffect(() => {
+    loadModel();
+    // Listen for storage events (e.g. if cleared in another tab)
+    const handleStorageChange = (e) => {
+      if (e.key === 'lasso_results') loadModel();
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, []);
 
   const handleInputChange = (e, feature) => {
+    setInputError(false); // remove error state on user typing
     setInputs(prev => ({
       ...prev,
       [feature]: e.target.value
@@ -40,6 +53,19 @@ const Prediction = () => {
 
   const handlePredict = () => {
     if (!modelData) return;
+    
+    // Validate that all inputs have a valid number
+    const isAnyEmptyOrNaN = modelData.selected_features.some(feature => {
+      const val = inputs[feature];
+      return val === '' || val === null || val === undefined || isNaN(parseFloat(val));
+    });
+
+    if (isAnyEmptyOrNaN) {
+       setInputError(true);
+       return;
+    }
+
+    setInputError(false);
     setIsCalculating(true);
     setPrediction(null);
 
@@ -112,21 +138,22 @@ const Prediction = () => {
           Enter your specific instance values below to calculate the real-time target projection using the optimized hyper-parameters.
         </p>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(300px, 1fr) minmax(300px, 400px)', gap: '3rem' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
           
           {/* Form Side */}
           <motion.div 
             initial={{ opacity: 0, x: -20 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: 0.2 }}
-            style={{ background: 'var(--surface-solid)', padding: '2rem', borderRadius: '1.5rem', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)' }}
+            style={{ background: 'var(--surface-solid)', padding: '2.5rem', borderRadius: '1.5rem', border: '1px solid var(--border-solid)', boxShadow: 'var(--shadow-md)' }}
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem', borderBottom: '1px solid var(--border-solid)', paddingBottom: '1rem' }}>
                <h3 style={{ margin: 0, color: 'var(--primary)', fontWeight: 'bold' }}>Structurally Active Variables</h3>
                <Sparkles size={20} color="var(--tertiary)" />
             </div>
             
-            <div style={{ display: 'grid', gap: '1.5rem' }}>
+            {/* Made grid 2-columns (auto-fit logic ensures it flows optimally if odd/even count) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
               <AnimatePresence>
                 {modelData.selected_features.map((feature, idx) => (
                   <motion.div 
@@ -135,11 +162,10 @@ const Prediction = () => {
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: 0.1 * idx }}
                     className="form-group" 
-                    style={{ display: 'flex', flexDirection: 'column', margin: 0 }}
+                    style={{ margin: 0 }}
                   >
                     <label className="form-label" style={{ fontWeight: '600', color: 'var(--text-main)', fontSize: '0.95rem', display: 'flex', justifyContent: 'space-between' }}>
                       {feature}
-                      <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 'normal' }}>Required</span>
                     </label>
                     <input 
                       type="number"
@@ -147,9 +173,18 @@ const Prediction = () => {
                       className="form-control"
                       value={inputs[feature] || ''}
                       onChange={(e) => handleInputChange(e, feature)}
-                      placeholder={`Enter numerical value...`}
-                      style={{ padding: '0.8rem', borderRadius: '0.8rem', background: 'var(--bg-color)', border: '1px solid var(--border)', transition: 'box-shadow 0.2s', boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' }}
-                      onFocus={(e) => e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.2)'}
+                      placeholder={`0.0`}
+                      style={{ 
+                        padding: '1rem', 
+                        borderRadius: '0.8rem', 
+                        background: 'var(--bg-color)', 
+                        border: inputError && (inputs[feature] === '' || isNaN(parseFloat(inputs[feature]))) ? '2px solid var(--error)' : '1px solid var(--border-solid)', 
+                        transition: 'all 0.2s', 
+                        boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)' 
+                      }}
+                      onFocus={(e) => {
+                        if (!inputError) e.target.style.boxShadow = '0 0 0 3px rgba(99, 102, 241, 0.2)'
+                      }}
                       onBlur={(e) => e.target.style.boxShadow = 'inset 0 2px 4px rgba(0,0,0,0.02)'}
                     />
                   </motion.div>
@@ -157,21 +192,29 @@ const Prediction = () => {
               </AnimatePresence>
             </div>
 
-            <motion.button 
-              whileHover={{ scale: 1.02, boxShadow: '0 10px 20px rgba(99, 102, 241, 0.2)' }}
-              whileTap={{ scale: 0.98 }}
-              onClick={handlePredict} 
-              disabled={isCalculating}
-              style={{ width: '100%', marginTop: '2rem', padding: '1.2rem', fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)', border: 'none', color: 'white', borderRadius: '1rem', cursor: 'pointer', transition: 'all 0.3s' }}
-            >
-              {isCalculating ? (
-                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-                  <BrainCircuit size={24} />
-                </motion.div>
-              ) : (
-                <><Zap size={24} /> Run Neural Projection</>
-              )}
-            </motion.button>
+            {inputError && (
+              <motion.div initial={{opacity: 0, y: -10}} animate={{opacity:1, y:0}} style={{color: 'var(--error)', marginTop: '1.5rem', textAlign: 'center', fontWeight: 'bold'}}>
+                All structural inputs must be filled with valid numbers before applying the projection.
+              </motion.div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              <motion.button 
+                whileHover={{ scale: 1.02, boxShadow: '0 10px 20px rgba(99, 102, 241, 0.2)' }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handlePredict} 
+                disabled={isCalculating}
+                style={{ width: '100%', maxWidth: '400px', marginTop: '2.5rem', padding: '1.2rem', fontSize: '1.2rem', fontWeight: 'bold', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', background: 'linear-gradient(135deg, var(--primary) 0%, var(--accent) 100%)', border: 'none', color: 'white', borderRadius: '1rem', cursor: 'pointer', transition: 'all 0.3s' }}
+              >
+                {isCalculating ? (
+                  <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
+                    <BrainCircuit size={24} />
+                  </motion.div>
+                ) : (
+                  <><Zap size={24} /> Run Neural Projection</>
+                )}
+              </motion.button>
+            </div>
           </motion.div>
 
           {/* Results Side */}
@@ -180,7 +223,7 @@ const Prediction = () => {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
-              style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '3rem', background: prediction !== null ? 'linear-gradient(145deg, rgba(16,185,129,0.05) 0%, rgba(16,185,129,0.15) 100%)' : 'var(--bg-color)', border: prediction !== null ? '2px solid var(--accent)' : '2px dashed var(--border-solid)', borderRadius: '1.5rem', transition: 'all 0.5s ease', position: 'relative', overflow: 'hidden' }}
+              style={{ flex: 1, minHeight: '300px', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center', padding: '3rem', background: prediction !== null ? 'linear-gradient(145deg, rgba(16,185,129,0.05) 0%, rgba(16,185,129,0.15) 100%)' : 'var(--bg-color)', border: prediction !== null ? '2px solid var(--accent)' : '2px dashed var(--border-solid)', borderRadius: '1.5rem', transition: 'all 0.5s ease', position: 'relative', overflow: 'hidden' }}
             >
               {prediction !== null && (
                 <motion.div 
