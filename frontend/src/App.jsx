@@ -7,6 +7,7 @@ import Learn from './pages/Learn';
 import Download from './pages/Download';
 import Prediction from './pages/Prediction';
 import DevelopedBy from './pages/DevelopedBy';
+import LocalSetup from './pages/LocalSetup';
 
 function App() {
   const location = useLocation();
@@ -20,6 +21,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/download" element={<Download />} />
+            <Route path="/local-setup" element={<LocalSetup />} />
             <Route path="/predict" element={<Prediction />} />
             <Route path="/developed-by" element={<DevelopedBy />} />
           </Routes>
