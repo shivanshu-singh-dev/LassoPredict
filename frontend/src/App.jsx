@@ -5,6 +5,7 @@ import NavBar from './components/NavBar';
 import Home from './pages/Home';
 import Learn from './pages/Learn';
 import Download from './pages/Download';
+import Prediction from './pages/Prediction';
 import DevelopedBy from './pages/DevelopedBy';
 
 function App() {
@@ -19,6 +20,7 @@ function App() {
             <Route path="/" element={<Home />} />
             <Route path="/learn" element={<Learn />} />
             <Route path="/download" element={<Download />} />
+            <Route path="/predict" element={<Prediction />} />
             <Route path="/developed-by" element={<DevelopedBy />} />
           </Routes>
         </AnimatePresence>

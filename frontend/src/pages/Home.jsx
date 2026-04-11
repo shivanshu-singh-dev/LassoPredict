@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BarChart, Bar, LineChart, Line, ScatterChart, Scatter, 
@@ -17,6 +18,7 @@ const Home = () => {
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState(null);
   const [finalResults, setFinalResults] = useState(null);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
   
 
   const [isAnimating, setIsAnimating] = useState(false);
@@ -113,6 +115,16 @@ const Home = () => {
             sequenceRef.current = setTimeout(() => {
               setVizStep(4);
               setIsAnimating(false);
+              
+              // Start 5 second cooldown
+              setCooldownRemaining(5);
+              let cd = 5;
+              const cdInterval = setInterval(() => {
+                cd -= 1;
+                setCooldownRemaining(cd);
+                if (cd <= 0) clearInterval(cdInterval);
+              }, 1000);
+
             }, 1500);
           }
         }, 220);
@@ -124,6 +136,7 @@ const Home = () => {
     if (!file) { setError("Please select a file to upload."); return; }
     if (!targetColumn) { setError("Please specify the target column name."); return; }
     if (alpha <= 0) { setError("Alpha must be greater than 0."); return; }
+    if (cooldownRemaining > 0) return;
     
     setError(null);
     setFinalResults(null);
@@ -319,12 +332,12 @@ const Home = () => {
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
             {error && <div style={{ color: 'var(--error)', marginBottom: '1rem', padding: '1rem', background: '#FEF2F2', borderRadius: '0.5rem', border: '1px solid #FECACA' }}>{error}</div>}
             
-            <button className="btn btn-primary" onClick={(e) => handleTrain(e)} disabled={isUploading || isAnimating} style={{ alignSelf: 'flex-start', padding: '1.2rem 2.5rem', fontSize: '1.3rem', fontWeight: 'bold', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center' }}>
+            <button className="btn btn-primary" onClick={(e) => handleTrain(e)} disabled={isUploading || isAnimating || cooldownRemaining > 0} style={{ alignSelf: 'flex-start', padding: '1.2rem 2.5rem', fontSize: '1.3rem', fontWeight: 'bold', boxShadow: 'var(--shadow-lg)', display: 'flex', alignItems: 'center' }}>
               {isUploading ? (
                 <span className="pulse" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 2, ease: "linear" }} style={{ width: 16, height: 16, border: '2px solid white', borderTopColor: 'transparent', borderRadius: '50%' }} /> Processing Iterations...
                 </span>
-              ) : isAnimating ? 'Mapping Visuals...' : 'Train Model'}
+              ) : isAnimating ? 'Mapping Visuals...' : cooldownRemaining > 0 ? `Cooldown (${cooldownRemaining}s)...` : 'Train Model'}
             </button>
           </div>
         </div>
@@ -564,7 +577,7 @@ const Home = () => {
                     </div>
                   </div>
 
-                  <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+                  <div className="table-container" style={{ maxHeight: '500px', overflowY: 'auto', marginBottom: '2rem' }}>
                     <table>
                       <thead>
                         <tr>
@@ -593,6 +606,20 @@ const Home = () => {
                       </tbody>
                     </table>
                   </div>
+
+                  {/* Prediction Redirect Toast */}
+                  <motion.div 
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.5 }}
+                    style={{ background: 'var(--surface-solid)', padding: '1.5rem', borderRadius: '1rem', border: '1px solid var(--border-solid)', textAlign: 'center', boxShadow: 'var(--shadow-lg)' }}
+                  >
+                    <h3 style={{ marginBottom: '1rem', color: 'var(--text-main)' }}>The model is fully trained!</h3>
+                    <p style={{ color: 'var(--text-muted)', marginBottom: '1.5rem' }}>Do live prediction testing with your new optimized structural parameters.</p>
+                    <Link to="/predict" className="btn btn-primary" style={{ padding: '1rem 2rem', fontSize: '1.2rem', textDecoration: 'none', display: 'inline-block' }}>
+                      Go to Prediction Tab
+                    </Link>
+                  </motion.div>
                 </motion.div>
               )}
             </AnimatePresence>
