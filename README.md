@@ -6,7 +6,7 @@ LassoPredict is an interactive, full-stack educational and visualization platfor
 
 ---
 
-## 🔥 Key Features
+## Key Features
 
 1. **Upload & Analyze**: Drag-and-drop CSV or Excel files. Define your target variable and the dataset is parsed automatically.
 2. **Interactive Gradient Penalty ($\alpha$)**: A responsive slider adjusting the alpha constraint in real-time.
@@ -16,7 +16,7 @@ LassoPredict is an interactive, full-stack educational and visualization platfor
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 The app is built as a unified monorepo designed explicitly for **Vercel Serverless Functions**.
 
@@ -25,7 +25,7 @@ The app is built as a unified monorepo designed explicitly for **Vercel Serverle
 
 ---
 
-## 🚀 Running Locally (Unlimited Scale)
+## Running Locally 
 
 The live web version on Vercel is capped at 5MB dataset uploads to prevent serverless execution timeouts. To run massive multi-gigabyte files, deploy the backend to your local machine!
 
@@ -43,6 +43,8 @@ cd LassoPredict
 Open a terminal and run the following commands:
 ```bash
 cd api
+python3 -m venv venv
+source venv/bin/activate
 pip install -r requirements.txt
 uvicorn index:app --reload
 ```
@@ -73,8 +75,5 @@ If you'd like to deploy your own instance of LassoPredict:
 
 ---
 
-## 👨‍💻 Developed By
-
-Developed to create a fluid, intuitive bridge between abstract Machine Learning mathematics and visual human intuition by exploring hyper-parameters practically rather than purely theoretically.
 
 If you enjoy the project, feel free to contribute, open PRs, or leave a star!

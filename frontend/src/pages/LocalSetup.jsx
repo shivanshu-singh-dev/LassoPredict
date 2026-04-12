@@ -51,6 +51,8 @@ const LocalSetup = () => {
               <div style={{ background: '#0f172a', borderRadius: '0.8rem', padding: '1.2rem', position: 'relative' }}>
                 <Terminal size={20} color="#64748b" style={{ position: 'absolute', top: '1.2rem', right: '1.2rem' }} />
                 <code style={{ color: '#10b981', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>$ cd api</code>
+                <code style={{ color: '#10b981', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>$ python3 -m venv venv</code>
+                <code style={{ color: '#10b981', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>$ source venv/bin/activate</code>
                 <code style={{ color: '#10b981', fontSize: '0.9rem', display: 'block', marginBottom: '0.5rem' }}>$ pip install -r requirements.txt</code>
                 <code style={{ color: '#10b981', fontSize: '0.9rem', display: 'block' }}>$ uvicorn index:app --reload</code>
               </div>
